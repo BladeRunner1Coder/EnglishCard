@@ -1,0 +1,7 @@
+.venv
+.idea
+__pycache__
+.env
+guide_app1.py
+main2.py
+Screenshot.png
