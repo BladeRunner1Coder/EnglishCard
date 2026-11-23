@@ -174,9 +174,11 @@ def get_statistics(conn, user_id):
         conn.rollback()
         raise
 
-def generate_options(conn, all_words):
+def generate_options(all_words):
     n_word = random.randint(0, len(all_words) - 1)
     russian_word = all_words[n_word]['russian_word']
+    id_word = all_words[n_word]['id']
+    type_word = all_words[n_word]['word_type']
     correct_word = ""
     for word in all_words:
         if russian_word == word['russian_word']:
@@ -187,4 +189,4 @@ def generate_options(conn, all_words):
     for n_word in n_words:
         c_words.append(na_words[n_word])
     random.shuffle(c_words)
-    return russian_word, correct_word, c_words
+    return id_word, russian_word, correct_word, type_word, c_words

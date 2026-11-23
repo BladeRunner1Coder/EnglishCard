@@ -25,6 +25,10 @@ if st.session_state.user_id:
     tab1, tab2, tab3, tab4 = st.tabs(["📖 Изучение", "➕ Добавить слово", "🗑️ Удалить слово", "📊 Статистика"])
     with tab1:
         sts.render_study_tab(con)
+
+st.divider()
+if st.button("Схема базы данных"):
+    st.image("postgres - english_card - public.png")
     # ... остальные вкладки
 # else:
 #     st.title("📚 Привет, давай попрактикуемся в английском языке!")

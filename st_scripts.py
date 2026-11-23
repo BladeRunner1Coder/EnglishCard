@@ -46,16 +46,35 @@ def render_sidebar(conn):
 
 def render_study_tab(conn):
     st.write("Изучаем слова")
-    words = db.get_user_words(conn, user_id=st.session_state.user_id)
-    r_word, c_word, c_words = db.generate_options(conn, words)
+    try:
+        words = db.get_user_words(conn, st.session_state.user_id)
+    except Exception as e:
+        st.error(f"Ошибка базы данных: {e}")
+        return
+    if "options" not in st.session_state:
+        st.session_state.options = db.generate_options(words)
+        st.session_state.answer_status = None
+    id_word, r_word, c_word, type_word, c_words = st.session_state.options
     st.write(f'Слово "{r_word}"')
     st.write("Как будет по-английски?")
     st.write("Выберите перевод:")
-    """
-    TODO: Реализовать вкладку изучения слов
-    - Отображение текущего слова на русском
-    - 4 кнопки с вариантами перевода
-    - Обработка правильных/неправильных ответов
-    - Кнопка следующего слова
-    """
-    pass
+    is_solved = st.session_state.answer_status is True
+    with st.container(horizontal=True, horizontal_alignment="left"):
+        for i, option in enumerate(c_words):
+            if st.button(option, key=f"option_{i}", disabled=is_solved):
+                is_correct = (option == c_word)
+                st.session_state.answer_status = is_correct
+                try:
+                    db.update_stats(conn, st.session_state.user_id, id_word, type_word, is_correct)
+                except Exception as e:
+                    st.error(f"Не удалось сохранить статистику: {e}")
+                if st.session_state.answer_status:
+                    st.rerun()
+    if st.session_state.answer_status is True:
+        st.success("Правильный ответ!")
+    elif st.session_state.answer_status is False:
+        st.error("Неправильный ответ! Попробуйте ещё раз!")
+    if st.button("Следующее слово"):
+        st.session_state.options = db.generate_options(words)
+        st.session_state.answer_status = None
+        st.rerun()
