@@ -27,18 +27,9 @@ if st.session_state.user_id:
         sts.render_study_tab(con)
     with tab2:
         sts.render_add_word_tab(con)
-
+    with tab3:
+        sts.render_delete_word_tab(con)
+    with tab4:
+        sts.render_statistics_tab(con)
 st.divider()
 sts.render_schema()
-
-    # ... остальные вкладки
-# else:
-#     st.title("📚 Привет, давай попрактикуемся в английском языке!")
-#     st.markdown("""
-#     ### У тебя есть возможность использовать тренажёр, как конструктор,
-#     ### и собирать свою собственную базу для обучения. Для этого нажми кнопку "Войти", введи своё имя и
-#     ### воспрользуйся инструментами: добавить слово ➕, удалить слово 🗑️, статистика 📚
-#     ### Ну что, начнём ⬇️
-#     """)
-    # Приветственное сообщение
-    # pass

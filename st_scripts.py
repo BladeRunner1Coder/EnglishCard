@@ -5,6 +5,7 @@ import os
 import random
 import db_scripts as db
 import re
+from datetime import datetime
 
 def render_sidebar(conn):
     with st.sidebar:
@@ -114,6 +115,77 @@ def render_add_word_tab(conn):
             st.warning("Такое слово уже есть в базе данных!")
     if "add_success_msg" in st.session_state:
         st.success(st.session_state.pop("add_success_msg"))
+        try:
+            word_number_list = db.get_user_words(conn, st.session_state.user_id)
+            st.write(f"Вы изучаете {len(word_number_list)} слов")
+        except Exception as e:
+            st.error(f"Не удалось прочитать количество слов из базы данных: {e}")
+
+def pluralize_words(n: int) -> str:
+    if 11 <= (n % 100) <= 19:
+        return f"{n} слов"
+    last_digit = n % 10
+    if last_digit == 1:
+        return f"{n} слово"
+    if 2 <= last_digit <= 4:
+        return f"{n} слова"
+    return f"{n} слов"
+
+def render_delete_word_tab(conn):
+    if "delete_success_msg" in st.session_state:
+        st.success(st.session_state.pop("delete_success_msg"))
+    try:
+        user_words = db.get_user_words(conn, st.session_state.user_id)
+    except Exception as e:
+        st.error(f"Не удалось взять слова из базы данных: {e}")
+        return
+    personal_words = []
+    for word in user_words:
+        if word["word_type"] == "user":
+            personal_words.append(word["russian_word"])
+    if personal_words:
+        selected_word = st.selectbox("Выберите слово:", personal_words)
+        st.write(f'Вы выбрали слово "{selected_word}"')
+        if st.button("Удалить слово из базы данных"):
+            word_id = None
+            for word in user_words:
+                if word["russian_word"] == selected_word:
+                    word_id = word["id"]
+                    break
+            try:
+                gone = db.delete_personal_word(conn, st.session_state.user_id, word_id)
+            except Exception as e:
+                st.error(f"Не удалось удалить слово из базы данных: {e}")
+                return
+            if gone:
+                st.session_state.delete_success_msg = "Слово удалено успешно!"
+                st.session_state.pop("answer_status", None)
+                st.session_state.pop("options", None)
+                st.rerun()
+            else:
+                st.warning("Не удалось удалить слово!")
+    else:
+        st.warning("У вас нет персональных слов!")
+
+def render_statistics_tab(conn):
+    try:
+        user_stats = db.get_statistics(conn, st.session_state.user_id)
+    except Exception as e:
+        st.error(f"Не удалось загрузить статистику: {e}")
+        return
+    if user_stats['total_attempts'] == 0:
+        percent = "Попыток ещё не было!"
+    else:
+        percent = round(100 * user_stats['correct_answers'] / user_stats['total_attempts'], 2)
+    st.write(f"Количество изученных слов: {user_stats['learned_words']}")
+    st.write(f"Количество попыток: {user_stats['total_attempts']}")
+    st.write(f"Количество правильных ответов: {user_stats['correct_answers']}")
+    st.write(f"Процент правильных ответов: {percent}")
+    if user_stats['last_reviewed'] is None:
+        st.write("Время самой недавней попытки: Попыток ещё не было!")
+    else:
+        formatted_time = user_stats['last_reviewed'].strftime("%H:%M:%S %d.%m.%Y")
+        st.write(f"Время самой недавней попытки: {formatted_time}")
 
 def render_schema():
     if "show_pic" not in st.session_state:

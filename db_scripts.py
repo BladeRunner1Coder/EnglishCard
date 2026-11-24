@@ -165,7 +165,6 @@ def get_statistics(conn, user_id):
             cur.execute('''SELECT COUNT(*), SUM(correct_answers), SUM(total_attempts), MAX(last_reviewed) 
                         FROM learning_stats WHERE user_id = %s;''', (user_id, ))
             row = cur.fetchone()
-            conn.commit()
             if not row or row[0] == 0:
                 return {'id': user_id, 'learned_words': 0, 'correct_answers': 0, 'total_attempts': 0, 'last_reviewed': None}
             else:
