@@ -1,13 +1,9 @@
 import streamlit as st
-import psycopg2
-from dotenv import load_dotenv
-import os
-import random
 import db_scripts as db
 import re
-from datetime import datetime
 
-def render_sidebar(conn):
+
+def render_sidebar():
     with st.sidebar:
         if "logged_in" not in st.session_state:
             st.session_state.logged_in = False
@@ -34,11 +30,11 @@ def render_sidebar(conn):
                     submitted = st.form_submit_button("Подтвердить")
                     if submitted:
                         try:
-                            user_id = db.login_user(conn, name)
+                            user_id = db.login_user(name)
                             if user_id is not None:
                                 st.session_state.logged_in = True
                                 st.session_state.show_login = False
-                                st.session_state.username = name.strip()
+                                st.session_state.username = name
                                 st.session_state.user_id = user_id
                                 st.rerun()
                             else:
@@ -46,10 +42,11 @@ def render_sidebar(conn):
                         except Exception as e:
                             st.error(f"Ошибка базы данных: {e}")
 
-def render_study_tab(conn):
+
+def render_study_tab():
     st.write("Изучаем слова")
     try:
-        words = db.get_user_words(conn, st.session_state.user_id)
+        words = db.get_user_words(st.session_state.user_id)
     except Exception as e:
         st.error(f"Ошибка базы данных: {e}")
         return
@@ -67,7 +64,7 @@ def render_study_tab(conn):
                 is_correct = (option == c_word)
                 st.session_state.answer_status = is_correct
                 try:
-                    db.update_stats(conn, st.session_state.user_id, id_word, type_word, is_correct)
+                    db.update_stats(st.session_state.user_id, id_word, type_word, is_correct)
                 except Exception as e:
                     st.error(f"Не удалось сохранить статистику: {e}")
                 if st.session_state.answer_status:
@@ -81,7 +78,8 @@ def render_study_tab(conn):
         st.session_state.answer_status = None
         st.rerun()
 
-def render_add_word_tab(conn):
+
+def render_add_word_tab():
     if st.session_state.pop("clear_add_form", False):
         st.session_state.add_r_word = ""
         st.session_state.add_e_word = ""
@@ -102,7 +100,7 @@ def render_add_word_tab(conn):
             st.warning("Английское слово должно содержать только латиницу.")
             return
         try:
-            added = db.add_personal_word(conn, st.session_state.user_id, r_clean, e_clean)
+            added = db.add_personal_word(st.session_state.user_id, r_clean, e_clean)
         except Exception as e:
             st.error(f"Не удалось добавить в базу данных: {e}")
             return
@@ -116,26 +114,25 @@ def render_add_word_tab(conn):
     if "add_success_msg" in st.session_state:
         st.success(st.session_state.pop("add_success_msg"))
         try:
-            word_number_list = db.get_user_words(conn, st.session_state.user_id)
-            st.write(f"Вы изучаете {len(word_number_list)} слов")
+            word_number_list = db.get_user_words(st.session_state.user_id)
+            n = len(word_number_list)
+            n_words = f"{n} слов"
+            if 11 <= (n % 100) <= 19:
+                n_words = f"{n} слов"
+            elif n % 10 == 1:
+                n_words = f"{n} слово"
+            elif 2 <= n % 10 <= 4:
+                n_words = f"{n} слова"
+            st.write(f"Вы изучаете {n_words}")
         except Exception as e:
             st.error(f"Не удалось прочитать количество слов из базы данных: {e}")
 
-def pluralize_words(n: int) -> str:
-    if 11 <= (n % 100) <= 19:
-        return f"{n} слов"
-    last_digit = n % 10
-    if last_digit == 1:
-        return f"{n} слово"
-    if 2 <= last_digit <= 4:
-        return f"{n} слова"
-    return f"{n} слов"
 
-def render_delete_word_tab(conn):
+def render_delete_word_tab():
     if "delete_success_msg" in st.session_state:
         st.success(st.session_state.pop("delete_success_msg"))
     try:
-        user_words = db.get_user_words(conn, st.session_state.user_id)
+        user_words = db.get_user_words(st.session_state.user_id)
     except Exception as e:
         st.error(f"Не удалось взять слова из базы данных: {e}")
         return
@@ -153,7 +150,7 @@ def render_delete_word_tab(conn):
                     word_id = word["id"]
                     break
             try:
-                gone = db.delete_personal_word(conn, st.session_state.user_id, word_id)
+                gone = db.delete_personal_word(st.session_state.user_id, word_id)
             except Exception as e:
                 st.error(f"Не удалось удалить слово из базы данных: {e}")
                 return
@@ -167,9 +164,10 @@ def render_delete_word_tab(conn):
     else:
         st.warning("У вас нет персональных слов!")
 
-def render_statistics_tab(conn):
+
+def render_statistics_tab():
     try:
-        user_stats = db.get_statistics(conn, st.session_state.user_id)
+        user_stats = db.get_statistics(st.session_state.user_id)
     except Exception as e:
         st.error(f"Не удалось загрузить статистику: {e}")
         return
@@ -186,6 +184,7 @@ def render_statistics_tab(conn):
     else:
         formatted_time = user_stats['last_reviewed'].strftime("%H:%M:%S %d.%m.%Y")
         st.write(f"Время самой недавней попытки: {formatted_time}")
+
 
 def render_schema():
     if "show_pic" not in st.session_state:

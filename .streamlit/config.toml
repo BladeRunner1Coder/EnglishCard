@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#aeb9f2"                # Buttons, active tabs, and highlights
+backgroundColor = "#146128"             # Main page background
+secondaryBackgroundColor = "#28ad4a"    # Sidebar and input widget backgrounds
+textColor = "#f3f56e"                   # Main text color
+font = "serif"                          # "sans serif", "serif", or "monospace"

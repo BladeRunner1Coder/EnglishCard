@@ -1,13 +1,13 @@
 import streamlit as st
 import psycopg2
-from dotenv import load_dotenv
 import os
 import random
+
 
 words = [("стол", "table"), ("кресло", "chair"), ("нож", "knife"), ("вилка", "fork"), ("ложка", "spoon"),
          ("комната", "room"), ("стекло", "glass"), ("дерево", "tree"), ("вода", "water"), ("солнце", "sun"),]
 
-@st.cache_resource
+
 def get_db_connection():
     conn = psycopg2.connect(host=os.getenv("DB_HOST", "localhost"),
                             database=os.getenv("DB_NAME", "your_db_name"),
@@ -16,10 +16,12 @@ def get_db_connection():
                             port=os.getenv("DB_PORT", "5431"))
     return conn
 
-@st.cache_resource
-def init_database(_conn, word_list):
+
+@st.cache_data
+def init_database():
+    conn = get_db_connection()
     try:
-        with _conn.cursor() as cur:
+        with conn.cursor() as cur:
             cur.execute('''CREATE TABLE IF NOT EXISTS users(id SERIAL PRIMARY KEY,
                         username VARCHAR(50) NOT NULL UNIQUE,
                         created_at TIMESTAMP NOT NULL DEFAULT NOW());''')
@@ -44,24 +46,27 @@ def init_database(_conn, word_list):
                         last_reviewed TIMESTAMP NOT NULL DEFAULT NOW(),
                         CONSTRAINT fk_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
                         UNIQUE(user_id, word_id, word_type));''')
-            if word_list:
+            if words:
                 cur.executemany('''INSERT INTO common_words(russian_word, english_word) VALUES(%s, %s)
-                                    ON CONFLICT (russian_word, english_word) DO NOTHING;''', word_list)
-        _conn.commit()
+                                    ON CONFLICT (russian_word, english_word) DO NOTHING;''', words)
+        conn.commit()
     except Exception:
-        _conn.rollback()
+        conn.rollback()
         raise
+    finally:
+        conn.close()
 
-def login_user(conn, username):
+
+def login_user(username):
     clean_username = username.strip()
     if not clean_username:
         return None
+    conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute('''SELECT id FROM users WHERE username = %s;''', (clean_username,))
             row = cur.fetchone()
             if row is not None:
-                conn.commit()
                 return row[0]
             else:
                 cur.execute('''INSERT INTO users(username) VALUES(%s) RETURNING id;''', (clean_username,))
@@ -71,9 +76,13 @@ def login_user(conn, username):
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
 
-def get_user_words(conn, user_id):
+
+def get_user_words(user_id):
     word_list = []
+    conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute('''SELECT id, russian_word, english_word FROM common_words;''')
@@ -83,61 +92,68 @@ def get_user_words(conn, user_id):
                 word_list.append(row)
             cur.execute('''SELECT id, russian_word, english_word FROM user_words WHERE user_id = %s;''', (user_id,))
             user_words = cur.fetchall()
-            if user_words is not None:
+            if user_words:
                 for u_w in user_words:
                     row = {'id': u_w[0], 'russian_word': u_w[1], 'english_word': u_w[2], 'word_type': 'user'}
                     word_list.append(row)
-        conn.commit()
         return word_list
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
 
-def add_personal_word(conn, user_id, russian_word, english_word):
-    clean_rus = russian_word.strip()
-    clean_eng = english_word.strip()
+
+def add_personal_word(user_id, russian_word, english_word):
+    clean_rus = russian_word.strip().lower()
+    clean_eng = english_word.strip().lower()
     if not clean_rus or not clean_eng:
         return False
+    conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute('''SELECT russian_word, english_word FROM common_words 
-            WHERE russian_word = %s AND english_word = %s;''', (clean_rus, clean_eng))
+            WHERE LOWER(russian_word) = %s AND LOWER(english_word) = %s;''', (clean_rus, clean_eng))
             if cur.fetchone() is not None:
-                conn.commit()
                 return False
             cur.execute('''SELECT russian_word, english_word FROM user_words WHERE user_id = %s 
             AND russian_word = %s AND english_word = %s;''', (user_id, clean_rus, clean_eng))
             if cur.fetchone() is not None:
-                conn.commit()
                 return False
             else:
                 cur.execute('''INSERT INTO user_words(user_id, russian_word, english_word) 
-                VALUES(%s, %s, %s);''', (user_id, clean_rus, clean_eng))
-                conn.commit()
-                return True
+                VALUES(%s, %s, %s) ON CONFLICT (user_id, russian_word, english_word)
+                 DO NOTHING;''', (user_id, clean_rus, clean_eng))
+            conn.commit()
+            return True
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
 
-def delete_personal_word(conn, user_id, word_id):
+
+def delete_personal_word(user_id, word_id):
+    conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute('''SELECT user_id, id FROM user_words 
-                        WHERE user_id = %s AND id = %s;''', (user_id, word_id))
-            if cur.fetchone() is not None:
                 cur.execute('''DELETE FROM user_words WHERE user_id = %s AND id = %s;''', (user_id, word_id))
-                cur.execute('''DELETE FROM learning_stats WHERE user_id = %s AND word_id = %s 
+                if cur.rowcount == 0:
+                    return False
+                else:
+                    cur.execute('''DELETE FROM learning_stats WHERE user_id = %s AND word_id = %s 
                             AND word_type = 'user';''', (user_id, word_id))
                 conn.commit()
                 return True
-            else:
-                conn.commit()
-                return False
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
 
-def update_stats(conn, user_id, word_id, word_type, is_correct):
+
+def update_stats(user_id, word_id, word_type, is_correct):
+    conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute('''SELECT user_id, word_id, word_type, correct_answers, total_attempts 
@@ -158,8 +174,12 @@ def update_stats(conn, user_id, word_id, word_type, is_correct):
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
 
-def get_statistics(conn, user_id):
+
+def get_statistics(user_id):
+    conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute('''SELECT COUNT(*), SUM(correct_answers), SUM(total_attempts), MAX(last_reviewed) 
@@ -172,6 +192,9 @@ def get_statistics(conn, user_id):
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
+
 
 def generate_options(all_words):
     n_word = random.randint(0, len(all_words) - 1)
